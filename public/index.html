@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI NEWS TERMINAL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0a;
+      color: #00ff41;
+      font-family: 'VT323', monospace;
+      font-size: 20px;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* CRT scanline overlay */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0.15) 0px,
+        rgba(0, 0, 0, 0.15) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* CRT flicker */
+    @keyframes flicker {
+      0%, 100% { opacity: 1; }
+      92% { opacity: 1; }
+      93% { opacity: 0.8; }
+      94% { opacity: 1; }
+      96% { opacity: 0.9; }
+      97% { opacity: 1; }
+    }
+
+    .crt { animation: flicker 4s infinite; }
+
+    /* Glow effect */
+    @keyframes textGlow {
+      0%, 100% { text-shadow: 0 0 5px #00ff41, 0 0 10px #00ff4180; }
+      50% { text-shadow: 0 0 10px #00ff41, 0 0 20px #00ff41, 0 0 30px #00ff4140; }
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      border: 2px solid #00ff41;
+      padding: 20px;
+      margin-bottom: 24px;
+      text-align: center;
+      position: relative;
+      background: #0a0a0a;
+    }
+
+    header::before {
+      content: "╔══════════════════════════════════════════╗";
+      position: absolute;
+      top: -14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #0a0a0a;
+      padding: 0 8px;
+      font-size: 14px;
+      color: #00ff4180;
+      white-space: nowrap;
+    }
+
+    h1 {
+      font-family: 'Press Start 2P', cursive;
+      font-size: 28px;
+      color: #00ff41;
+      animation: textGlow 3s ease-in-out infinite;
+      margin-bottom: 8px;
+      letter-spacing: 3px;
+    }
+
+    .subtitle {
+      color: #00cc33;
+      font-size: 22px;
+    }
+
+    .date-display {
+      color: #ffb000;
+      font-size: 22px;
+      margin-top: 8px;
+    }
+
+    .stats-bar {
+      display: flex;
+      justify-content: space-between;
+      border: 1px solid #00ff4140;
+      padding: 10px 16px;
+      margin-bottom: 20px;
+      font-size: 18px;
+      color: #00cc33;
+    }
+
+    .stats-bar .count { color: #ffb000; }
+
+    /* Loading animation */
+    .loader {
+      text-align: center;
+      padding: 60px 20px;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .cursor-blink { animation: blink 1s step-end infinite; }
+
+    .loader-text {
+      font-size: 24px;
+      margin-bottom: 16px;
+    }
+
+    .progress-bar {
+      display: inline-block;
+      width: 300px;
+      height: 20px;
+      border: 1px solid #00ff41;
+      position: relative;
+      overflow: hidden;
+    }
+
+    @keyframes scan {
+      0% { left: -40%; }
+      100% { left: 100%; }
+    }
+
+    .progress-bar::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -40%;
+      width: 40%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, #00ff41, transparent);
+      animation: scan 1.5s ease-in-out infinite;
+    }
+
+    /* News cards */
+    .news-list { list-style: none; }
+
+    .news-item {
+      border: 1px solid #00ff4130;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: #0d0d0d;
+      transition: all 0.2s;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .news-item:hover {
+      border-color: #00ff41;
+      background: #111;
+      box-shadow: 0 0 15px #00ff4120, inset 0 0 15px #00ff4108;
+    }
+
+    .news-item::before {
+      content: ">";
+      position: absolute;
+      left: -16px;
+      top: 16px;
+      color: #00ff41;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .news-item:hover::before { opacity: 1; }
+
+    .news-item a {
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+
+    .news-title {
+      font-size: 22px;
+      color: #00ff41;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+
+    .news-meta {
+      display: flex;
+      gap: 20px;
+      font-size: 17px;
+      color: #00884480;
+    }
+
+    .news-source { color: #ffb000; }
+    .news-time { color: #00cc33; }
+
+    .news-snippet {
+      margin-top: 8px;
+      color: #00aa30;
+      font-size: 18px;
+      line-height: 1.4;
+      max-height: 52px;
+      overflow: hidden;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #00884480;
+    }
+
+    .empty-state .ascii-art {
+      font-size: 14px;
+      line-height: 1.2;
+      margin-bottom: 20px;
+      color: #00ff4140;
+    }
+
+    /* Error state */
+    .error-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #ff4141;
+      border: 1px solid #ff414140;
+    }
+
+    .error-state .retry-btn {
+      margin-top: 16px;
+      background: transparent;
+      border: 1px solid #ff4141;
+      color: #ff4141;
+      font-family: 'VT323', monospace;
+      font-size: 20px;
+      padding: 8px 24px;
+      cursor: pointer;
+    }
+
+    .error-state .retry-btn:hover {
+      background: #ff414120;
+    }
+
+    footer {
+      text-align: center;
+      padding: 20px;
+      color: #00884440;
+      font-size: 16px;
+      border-top: 1px solid #00ff4115;
+      margin-top: 20px;
+    }
+
+    /* Refresh button */
+    .refresh-btn {
+      background: transparent;
+      border: 1px solid #00ff41;
+      color: #00ff41;
+      font-family: 'VT323', monospace;
+      font-size: 20px;
+      padding: 6px 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .refresh-btn:hover {
+      background: #00ff4120;
+      box-shadow: 0 0 10px #00ff4140;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-in {
+      animation: fadeIn 0.3s ease-out forwards;
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="crt">
+    <div class="container">
+      <header>
+        <h1>AI NEWS TERMINAL</h1>
+        <div class="subtitle">[ REAL-TIME AI ANNOUNCEMENTS FEED ]</div>
+        <div class="date-display" id="dateDisplay"></div>
+      </header>
+
+      <div class="stats-bar">
+        <span>STATUS: <span id="statusText" style="color:#00ff41">INITIALIZING...</span></span>
+        <span>ARTICLES: <span class="count" id="articleCount">--</span></span>
+        <span><button class="refresh-btn" onclick="loadNews()">[ REFRESH ]</button></span>
+      </div>
+
+      <main id="content">
+        <div class="loader">
+          <div class="loader-text">SCANNING AI NEWS FEEDS<span class="cursor-blink">_</span></div>
+          <div class="progress-bar"></div>
+        </div>
+      </main>
+
+      <footer>
+        &gt; AI NEWS TERMINAL v1.0 // SOURCES: GOOGLE NEWS RSS // AUTO-CURATED
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    const content = document.getElementById("content");
+    const statusText = document.getElementById("statusText");
+    const articleCount = document.getElementById("articleCount");
+    const dateDisplay = document.getElementById("dateDisplay");
+
+    dateDisplay.textContent = `DATE: ${new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }).toUpperCase()}`;
+
+    function formatTime(dateStr) {
+      const d = new Date(dateStr);
+      return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+    }
+
+    function stripHtml(html) {
+      const tmp = document.createElement("div");
+      tmp.innerHTML = html;
+      return tmp.textContent || tmp.innerText || "";
+    }
+
+    async function loadNews() {
+      statusText.textContent = "SCANNING...";
+      statusText.style.color = "#ffb000";
+      articleCount.textContent = "--";
+
+      content.innerHTML = `
+        <div class="loader">
+          <div class="loader-text">SCANNING AI NEWS FEEDS<span class="cursor-blink">_</span></div>
+          <div class="progress-bar"></div>
+        </div>`;
+
+      try {
+        const res = await fetch("/api/news");
+        if (!res.ok) throw new Error("Feed unavailable");
+
+        const data = await res.json();
+        articleCount.textContent = data.count;
+
+        if (data.articles.length === 0) {
+          statusText.textContent = "NO DATA";
+          statusText.style.color = "#ffb000";
+          content.innerHTML = `
+            <div class="empty-state">
+              <pre class="ascii-art">
+   ___________
+  |  _______  |
+  | |       | |
+  | | NO    | |
+  | | SIGNAL| |
+  | |_______| |
+  |___________|
+              </pre>
+              <p>NO AI ANNOUNCEMENTS DETECTED TODAY.</p>
+              <p style="margin-top:8px; font-size:17px">CHECK BACK LATER OR REFRESH THE FEED.</p>
+            </div>`;
+          return;
+        }
+
+        statusText.textContent = "ONLINE";
+        statusText.style.color = "#00ff41";
+
+        let html = '<ul class="news-list">';
+        data.articles.forEach((article, i) => {
+          const snippet = stripHtml(article.snippet).slice(0, 180);
+          html += `
+            <li class="news-item fade-in" style="animation-delay: ${i * 0.06}s">
+              <a href="${article.link}" target="_blank" rel="noopener">
+                <div class="news-title">&gt; ${article.title}</div>
+                <div class="news-meta">
+                  <span class="news-source">[${article.source}]</span>
+                  <span class="news-time">${formatTime(article.pubDate)}</span>
+                </div>
+                ${snippet ? `<div class="news-snippet">${snippet}</div>` : ""}
+              </a>
+            </li>`;
+        });
+        html += "</ul>";
+        content.innerHTML = html;
+
+      } catch (err) {
+        statusText.textContent = "ERROR";
+        statusText.style.color = "#ff4141";
+        content.innerHTML = `
+          <div class="error-state">
+            <p>ERROR: FAILED TO CONNECT TO NEWS FEED</p>
+            <p style="font-size:17px; margin-top:8px">${err.message}</p>
+            <button class="retry-btn" onclick="loadNews()">[ RETRY CONNECTION ]</button>
+          </div>`;
+      }
+    }
+
+    loadNews();
+    // Auto-refresh every 5 minutes
+    setInterval(loadNews, 5 * 60 * 1000);
+  </script>
+</body>
+</html>
